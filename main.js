@@ -28,6 +28,9 @@ activeDateInput.addEventListener("change", () => {
 const monthSelect = document.getElementById("monthSelect");
 let selectedMonth = null;
 
+const weekSelect = document.getElementById("weekSelect");
+let selectedWeek = null;
+
 // Render on load
 render();
 
@@ -70,6 +73,11 @@ addBtn.addEventListener("click", () => {
 
 monthSelect.addEventListener("change", () => {
   selectedMonth = monthSelect.value;
+  render();
+});
+
+weekSelect.addEventListener("change", () => {
+  selectedWeek = weekSelect.value;
   render();
 });
 
@@ -241,6 +249,7 @@ function render() {
   }
   updateStartDayButton();
   renderMonthlySummary();
+  renderWeeklySummary();
 }
 
 // store the id of the expense being edited
@@ -399,6 +408,10 @@ function renderMonthlySummary() {
   `;
 
   container.innerHTML += renderCategoryComparison(month);
+  drawPieChart(
+    "monthlyCategoryChart",
+    data.categories
+  );
 }
 
 function getMonthlyComparison() {
@@ -539,5 +552,299 @@ function renderCategoryComparison(month) {
       </div>
     </div>
   `;
+}
+
+function getWeekKey(dateStr) {
+  const date = new Date(dateStr);
+  date.setHours(0, 0, 0, 0);
+
+  // Thursday determines the week
+  date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  const weekNumber =
+    1 +
+    Math.round(
+      ((date - week1) / 86400000 -
+        3 +
+        ((week1.getDay() + 6) % 7)) /
+        7
+    );
+
+  return `${date.getFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
+}
+
+function getWeeklyTotals() {
+  return dailyHistory.reduce((acc, day) => {
+    const weekKey = getWeekKey(day.date);
+
+    if (!acc[weekKey]) {
+      acc[weekKey] = {
+        total: 0,
+        days: 0,
+        categories: {}
+      };
+    }
+
+    acc[weekKey].total += day.total;
+    acc[weekKey].days += 1;
+
+    day.expenses.forEach(exp => {
+      if (!acc[weekKey].categories[exp.category]) {
+        acc[weekKey].categories[exp.category] = 0;
+      }
+      acc[weekKey].categories[exp.category] += exp.amount;
+    });
+
+    return acc;
+  }, {});
+}
+
+function renderWeeklySummary() {
+  const container = document.getElementById("weeklySummary");
+  const weeklyData = getWeeklyTotals();
+  const weeks = Object.keys(weeklyData).sort();
+
+  container.innerHTML = "";
+
+  if (weeks.length === 0) {
+    container.innerHTML =
+      `<p class="text-gray-500 text-sm">No weekly data yet.</p>`;
+    return;
+  }
+
+  populateWeekSelect(weeks);
+
+  const week = selectedWeek;
+  const data = weeklyData[week];
+
+  const { start, end } = getWeekRange(week);
+  // comparison
+  container.innerHTML = renderWeeklyComparison() || "";
+
+  const categoryList = Object.entries(data.categories)
+    .map(
+      ([cat, amount]) => `
+        <div class="flex justify-between text-sm">
+          <span>${cat}</span>
+          <span class="font-medium">${amount.toFixed(2)}</span>
+        </div>
+      `
+    )
+    .join("");
+
+  container.innerHTML += `
+    <div class="bg-white rounded-xl shadow p-4 border">
+      <h3 class="font-semibold mb-1">
+        Week ${week.split("-W")[1]} •
+        ${formatShortDate(start)} – ${formatShortDate(end)}
+      </h3>
+      <p class="text-sm text-gray-600 mb-2">
+        ${data.days} days • Total:
+        <span class="font-semibold">${data.total.toFixed(2)}</span>
+      </p>
+
+      <div class="border-t pt-2 space-y-1">
+        ${categoryList}
+      </div>
+    </div>
+  `;
+
+  // draw weekly chart
+  const chartData = getWeeklyChartData();
+  drawBarChart(
+    "weeklyTotalChart",
+    chartData.labels,
+    chartData.values
+  );
+}
+
+function getWeeklyComparison() {
+  const weeklyData = getWeeklyTotals();
+  const weeks = Object.keys(weeklyData).sort();
+
+  if (weeks.length < 2) return null;
+
+  const currentWeek = weeks[weeks.length - 1];
+  const previousWeek = weeks[weeks.length - 2];
+
+  const currentTotal = weeklyData[currentWeek].total;
+  const previousTotal = weeklyData[previousWeek].total;
+
+  const diff = currentTotal - previousTotal;
+  const percent =
+    previousTotal === 0
+      ? 0
+      : (diff / previousTotal) * 100;
+
+  return {
+    currentWeek,
+    previousWeek,
+    diff,
+    percent
+  };
+}
+
+function renderWeeklyComparison() {
+  const data = getWeeklyComparison();
+  if (!data) return "";
+
+  const { previousWeek, diff, percent } = data;
+
+  const isIncrease = diff > 0;
+  const color = isIncrease ? "text-red-600" : "text-green-600";
+  const sign = isIncrease ? "+" : "";
+
+  return `
+    <div class="mb-4 p-4 rounded-lg border bg-gray-50">
+      <p class="text-sm">
+        Compared to <strong>${previousWeek}</strong>:
+        <span class="${color} font-semibold">
+          ${sign}${percent.toFixed(1)}%
+        </span>
+      </p>
+    </div>
+  `;
+}
+
+function populateWeekSelect(weeks) {
+  weekSelect.innerHTML = "";
+
+  weeks.forEach(week => {
+    const option = document.createElement("option");
+    option.value = week;
+    option.textContent = week;
+    weekSelect.appendChild(option);
+  });
+
+  if (!selectedWeek && weeks.length > 0) {
+    selectedWeek = weeks[weeks.length - 1]; // latest week
+  }
+
+  weekSelect.value = selectedWeek;
+}
+
+// get week start ad end dates
+function getWeekRange(weekKey) {
+  const [year, week] = weekKey.split("-W").map(Number);
+
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = (jan4.getDay() + 6) % 7; // Monday = 0
+  const monday = new Date(jan4);
+  monday.setDate(jan4.getDate() - jan4Day + (week - 1) * 7);
+
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  return {
+    start: monday,
+    end: sunday
+  };
+}
+
+//formt date nicely
+function formatShortDate(date) {
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric"
+  });
+}
+
+// helper function to generate hsl colors
+function generateColors(count) {
+  return Array.from({ length: count }, (_, i) =>
+    `hsl(${(i * 360) / count}, 70%, 60%)`
+  );
+}
+
+// Draw pie chart
+function drawPieChart(canvasId, dataObj) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext("2d");
+
+  const values = Object.values(dataObj);
+  const labels = Object.keys(dataObj);
+
+  if (values.length === 0) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  const total = values.reduce((a, b) => a + b, 0);
+  const colors = generateColors(values.length);
+
+  let startAngle = 0;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  values.forEach((value, i) => {
+    const sliceAngle = (value / total) * Math.PI * 2;
+
+    ctx.beginPath();
+    ctx.moveTo(150, 150);
+    ctx.arc(
+      150,
+      150,
+      120,
+      startAngle,
+      startAngle + sliceAngle
+    );
+    ctx.closePath();
+
+    ctx.fillStyle = colors[i];
+    ctx.fill();
+
+    startAngle += sliceAngle;
+  });
+}
+
+// draw bar chart
+function drawBarChart(canvasId, labels, values) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const padding = 40;
+  const chartWidth = canvas.width - padding * 2;
+  const chartHeight = canvas.height - padding * 2;
+
+  const maxValue = Math.max(...values, 1);
+  const barWidth = chartWidth / values.length - 50;
+
+  values.forEach((value, i) => {
+    const barHeight = (value / maxValue) * chartHeight;
+    const x = padding + i * (barWidth + 10);
+    const y = canvas.height - padding - barHeight;
+
+    ctx.fillStyle = "#4f46e5"; // indigo
+    ctx.fillRect(x, y, barWidth, barHeight);
+
+    // value label
+    ctx.fillStyle = "#111";
+    ctx.font = "12px sans-serif";
+    ctx.fillText(
+      value.toFixed(0),
+      x,
+      y - 5
+    );
+
+    // x label
+    ctx.fillText(
+      labels[i],
+      x,
+      canvas.height - 15
+    );
+  });
+}
+
+// get weekly chart data
+function getWeeklyChartData() {
+  const weeklyData = getWeeklyTotals();
+  const weeks = Object.keys(weeklyData).sort();
+
+  return {
+    labels: weeks.map(w => w.split("-W")[1]), // week number
+    values: weeks.map(w => weeklyData[w].total)
+  };
 }
 

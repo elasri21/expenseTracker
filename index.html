@@ -76,6 +76,7 @@
       <!-- Daily totals will be generated here -->
     </div>
 
+    <!-- monthly Select -->
     <div class="mb-4 flex items-center gap-3">
       <label class="text-sm text-gray-600">Select Month:</label>
       <select
@@ -84,11 +85,42 @@
       ></select>
     </div>
 
+    <!-- monthlySummary -->
     <section class="mt-8">
       <h2 class="text-lg font-semibold mb-4">Monthly Summary</h2>
 
       <div
         id="monthlySummary"
+        class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      ></div>
+      <canvas
+        id="monthlyCategoryChart"
+        width="300"
+        height="300"
+        class="mx-auto mt-4"
+      ></canvas>
+    </section>
+
+    <!-- weekly Select -->
+    <div class="mb-4 flex items-center gap-3">
+      <label class="text-sm text-gray-600">Select Week:</label>
+      <select
+        id="weekSelect"
+        class="border rounded-lg px-3 py-2 text-sm"
+      ></select>
+    </div>
+
+    <!-- weeklySummary -->
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold mb-4">Weekly Summary</h2>
+      <canvas
+        id="weeklyTotalChart"
+        width="500"
+        height="300"
+        class="mx-auto mb-6"
+      ></canvas>
+      <div
+        id="weeklySummary"
         class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
       ></div>
     </section>
