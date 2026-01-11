@@ -1,3 +1,64 @@
+const DateUtils = {
+  today() {
+    return new Date().toISOString().slice(0, 10);
+  },
+
+  toDate(dateStr) {
+    return new Date(dateStr + "T00:00:00");
+  },
+
+  dayKey(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  },
+
+  monthKey(dateStr) {
+    const d = this.toDate(dateStr);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  },
+
+  weekKey(dateStr) {
+    const d = this.toDate(dateStr);
+    const start = new Date(d.getFullYear(), 0, 1);
+    const days = Math.floor((d - start) / 86400000);
+    const week = Math.ceil((days + start.getDay() + 1) / 7);
+    return `${d.getFullYear()}-W${week}`;
+  }
+};
+const state = {
+  expenses: JSON.parse(localStorage.getItem("expenses")) || [],
+  selectedDate: DateUtils.today(),
+};
+const Storage = {
+  save(expenses, currentDay ) {
+    localStorage.setItem("expenses", JSON.stringify(expenses));
+    localStorage.setItem("activeDate", currentDay);
+  },
+
+  load() {
+    return {
+      expenses: JSON.parse(localStorage.getItem("expenses")) || [],
+      currentDay: localStorage.getItem("activeDate") || DateUtils.dayKey(new Date()),
+    };
+  },
+
+  clear() {
+    localStorage.removeItem("expenses");
+    localStorage.removeItem("activeDate");
+  }
+};
+const CATEGORY_COLORS = {
+  Food: "#f87171",
+  Transport: "#60a5fa",
+  Shopping: "#fbbf24",
+  Bills: "#34d399",
+  Health: "#a78bfa",
+  Other: "#9ca3af"
+};
+
 const titleInput = document.getElementById("title");
 const amountInput = document.getElementById("amount");
 const addBtn = document.getElementById("addBtn");
@@ -7,9 +68,20 @@ const categoryInput = document.getElementById("category");
 const filterCategory = document.getElementById("filterCategory");
 const clearAllBtnContainer = document.querySelector(".clearAllBtn");
 // Load existing expenses
-let expenses = JSON.parse(localStorage.getItem("expenses")) || [];
+const loaded = Storage.load();
+
+state.expenses = loaded.expenses || [];
+state.expenses = state.expenses.map(e => ({
+  id: e.id || generateId(),
+  title: e.title || "",
+  amount: Number(e.amount),
+  category: e.category || "Other",
+  date: e.date,
+  note: e.note || ""
+}));
 let dailyHistory = JSON.parse(localStorage.getItem("dailyHistory")) || [];
-const today = new Date().toISOString().split("T")[0];
+
+const today = DateUtils.dayKey(new Date());
 
 const modal = document.getElementById("dayModal");
 const modalDate = document.getElementById("modalDate");
@@ -18,12 +90,13 @@ const modalList = document.getElementById("modalList");
 
 const activeDateInput = document.getElementById("activeDate");
 let activeDate =
-  localStorage.getItem("activeDate") ||
-  new Date().toISOString().split("T")[0];
+  loaded.currentDay ||
+  DateUtils.dayKey(new Date());
 activeDateInput.value = activeDate;
 activeDateInput.addEventListener("change", () => {
   activeDate = activeDateInput.value;
-  localStorage.setItem("activeDate", activeDate);
+  //localStorage.setItem("activeDate", activeDate);
+  Storage.save(state.expenses, activeDate);
 });
 const monthSelect = document.getElementById("monthSelect");
 let selectedMonth = null;
@@ -38,7 +111,8 @@ addBtn.addEventListener("click", () => {
   const title = titleInput.value.trim();
   const amount = Number(amountInput.value);
   const category = categoryInput.value;
-
+  const note = '';
+  const date = activeDate;
   if (!title || !amount || !category) {
     alert("Please enter a title and amount");
     return;
@@ -46,25 +120,34 @@ addBtn.addEventListener("click", () => {
 
   // if editing
   if (editId !== null) {
-    expenses = expenses.map((exp) =>
+    state.expenses = state.expenses.map((exp) =>
       exp.id === editId ? { ...exp, title, amount, category } : exp
     );
-    save();
+    //save();
+    //dailyHistory.push({
+      //...dailyHistory,
+      //expenses: [...state.expenses]
+    //});
+    Storage.save(state.expenses, activeDate);
     render();
     resetForm();
     return;
   }
 
-  const expense = {
-    id: Date.now(),
-    title,
-    amount,
-    category,
-    date: activeDate
-  };
+  // expenses.push(expense);
+  state.expenses.push(
+    createExpense({title, amount, category, date, note})
+  );
 
-  expenses.push(expense);
-  save();
+  const total = state.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+  //dailyHistory.push({
+    //date: activeDate,
+    //total: total,
+    //expenses: [...state.expenses]
+  //});
+  //save();
+  Storage.save(state.expenses, activeDate);
   render();
 
   titleInput.value = "";
@@ -85,7 +168,8 @@ weekSelect.addEventListener("change", () => {
 const clearAllBtn = document.getElementById("clearAllBtn");
 if (clearAllBtn) {
   clearAllBtn.addEventListener("click", () => {
-    if (expenses.length === 0) return;
+    //if (expenses.length === 0) return;
+    if (state.expenses.length === 0) return;
 
     if (isDayClosed(activeDate)) {
       alert("This day is already closed.");
@@ -96,27 +180,31 @@ if (clearAllBtn) {
 
     // const today = new Date().toISOString().split("T")[0];
 
-    const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    //const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const total = state.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+    //dailyHistory.push({
+      //date: activeDate,
+      //total,
+      //expenses: [...expenses]
+    //});
 
     dailyHistory.push({
       date: activeDate,
       total,
-      expenses: [...expenses]
+      expenses: [...state.expenses]
     });
 
     localStorage.setItem("dailyHistory", JSON.stringify(dailyHistory));
-
-    expenses = [];
-    save();
-
-    // move to next day automatically
-    const nextDay = new Date(activeDate);
-    nextDay.setDate(nextDay.getDate() + 1);
-
-    activeDate = nextDay.toISOString().split("T")[0];
+    
+    //expenses = [];
+    state.expenses = [];
+    
+    //activeDate = nextDay.toISOString().split("T")[0];
+    activeDate = DateUtils.dayKey(new Date())
     activeDateInput.value = activeDate;
-    localStorage.setItem("activeDate", activeDate);
-
+    //localStorage.setItem("activeDate", activeDate);
+    Storage.save(state.expenses, activeDate);
     render();
   });
 }
@@ -134,7 +222,14 @@ function isDayClosed(date) {
 function calculateDailyTotals() {
   const daily = {};
 
-  expenses.forEach(exp => {
+  //expenses.forEach(exp => {
+    //if (!daily[exp.date]) {
+      //daily[exp.date] = 0;
+    //}
+    //daily[exp.date] += exp.amount;
+  //});
+
+  state.expenses.forEach(exp => {
     if (!daily[exp.date]) {
       daily[exp.date] = 0;
     }
@@ -156,15 +251,14 @@ function resetForm() {
   categoryInput.value = "";
 }
 
-// Save to localStorage
-function save() {
-  localStorage.setItem("expenses", JSON.stringify(expenses));
-}
-
 // Delete expense
 function deleteExpense(id) {
-  expenses = expenses.filter((exp) => exp.id !== id);
-  save();
+  //expenses = expenses.filter((exp) => exp.id !== id);
+  state.expenses = state.expenses.filter((exp) => exp.id !== id);
+  // save();
+  
+  // dailyHistory.push({...dailyHistory, expenses: [state.expenses]})
+  Storage.save(state.expenses, activeDate);
   render();
 }
 
@@ -174,13 +268,17 @@ function render() {
 
   let total = 0;
   
-  const dayExpenses = expenses.filter(
+  //const dayExpenses = expenses.filter(
+    //exp => exp.date === activeDate
+  //);
+  const dayExpenses = state.expenses.filter(
     exp => exp.date === activeDate
   );
   let filtered = dayExpenses;
 
   if (filterCategory.value !== "All") {
-    filtered = expenses.filter((exp) => exp.category === filterCategory.value);
+    //filtered = expenses.filter((exp) => exp.category === filterCategory.value);
+    filtered = state.expenses.filter((exp) => exp.category === filterCategory.value);
   }
   
   filtered.forEach(exp => total += exp.amount);
@@ -196,8 +294,8 @@ function render() {
       </span>
 
       <div class="flex gap-4 ml-auto">
-        <button onclick="editExpense(${exp.id})" class="text-blue-600 hover:underline">Edit</button>
-        <button onclick="deleteExpense(${exp.id})" class="text-red-600 hover:underline">Delete</button>
+        <button onclick="editExpense('${exp.id}')" class="text-blue-600 hover:underline">Edit</button>
+        <button onclick="deleteExpense('${exp.id}')" class="text-red-600 hover:underline">Delete</button>
       </div>
     `;
     list.appendChild(li);
@@ -205,6 +303,16 @@ function render() {
 
   // Calculate totals per category (using filtered list)
   const totals = calculateCategoryTotals(filtered);
+
+  //const currentMonth = activeDate.slice(0, 7); // "2026-01"
+  const currentMonth = monthSelect.value.slice(0, 7)|| activeDate.slice(0, 7);
+  const monthlyExpenses = getAllHistoricalExpenses().filter(
+    exp => exp.date.slice(0, 7) === currentMonth
+  );
+
+  const monthlyTotals = calculateCategoryTotals(monthlyExpenses);
+  renderMonthlyLegend(monthlyTotals);
+ 
   // Display totals
   const totalsContainer = document.getElementById("categoryTotals");
 
@@ -230,10 +338,11 @@ function render() {
 
   // Render section
   const dailyContainer = document.getElementById("dailySummary");
-
+ 
   if (dailyHistory.length === 0) {
     dailyContainer.innerHTML = "<p class='text-gray-500'>No daily history yet.</p>";
   } else {
+
     dailyContainer.innerHTML = dailyHistory
       .slice()
       .reverse()
@@ -256,7 +365,8 @@ function render() {
 let editId = null;
 
 function editExpense(id) {
-  const exp = expenses.find((e) => e.id === id);
+  //const exp = expenses.find((e) => e.id === id);
+  const exp = state.expenses.find((e) => e.id === id);
   if (!exp) return;
 
   // prefill input fields
@@ -320,7 +430,8 @@ function closeModal() {
 }
 
 function updateStartDayButton() {
-  if (expenses.length === 0) {
+  //if (expenses.length === 0) {
+  if (state.expenses.length === 0) {
     clearAllBtnContainer.innerHTML = "";
   } else {
     clearAllBtnContainer.innerHTML = `
@@ -332,11 +443,12 @@ function updateStartDayButton() {
   }
 }
 
-// monthly totaals
+// monthly totals
 function getMonthlyTotals() {
   return dailyHistory.reduce((acc, day) => {
-    const monthKey = day.date.slice(0, 7); // "YYYY-MM"
-
+    //const monthKey = day.date.slice(0, 7); // "YYYY-MM"
+    const monthKey = DateUtils.monthKey(day.date)
+    
     if (!acc[monthKey]) {
       acc[monthKey] = {
         total: 0,
@@ -360,9 +472,11 @@ function getMonthlyTotals() {
   }, {});
 }
 
+// render monthly summury
 function renderMonthlySummary() {
   const container = document.getElementById("monthlySummary");
   const monthlyData = getMonthlyTotals();
+
   const months = Object.keys(monthlyData).sort();
 
   container.innerHTML = "";
@@ -412,6 +526,7 @@ function renderMonthlySummary() {
     "monthlyCategoryChart",
     data.categories
   );
+
 }
 
 function getMonthlyComparison() {
@@ -554,29 +669,10 @@ function renderCategoryComparison(month) {
   `;
 }
 
-function getWeekKey(dateStr) {
-  const date = new Date(dateStr);
-  date.setHours(0, 0, 0, 0);
-
-  // Thursday determines the week
-  date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
-
-  const week1 = new Date(date.getFullYear(), 0, 4);
-  const weekNumber =
-    1 +
-    Math.round(
-      ((date - week1) / 86400000 -
-        3 +
-        ((week1.getDay() + 6) % 7)) /
-        7
-    );
-
-  return `${date.getFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
-}
-
 function getWeeklyTotals() {
   return dailyHistory.reduce((acc, day) => {
-    const weekKey = getWeekKey(day.date);
+    //const weekKey = getWeekKey(day.date);
+    const weekKey = DateUtils.weekKey(day.date);
 
     if (!acc[weekKey]) {
       acc[weekKey] = {
@@ -750,13 +846,6 @@ function formatShortDate(date) {
   });
 }
 
-// helper function to generate hsl colors
-function generateColors(count) {
-  return Array.from({ length: count }, (_, i) =>
-    `hsl(${(i * 360) / count}, 70%, 60%)`
-  );
-}
-
 // Draw pie chart
 function drawPieChart(canvasId, dataObj) {
   const canvas = document.getElementById(canvasId);
@@ -771,11 +860,11 @@ function drawPieChart(canvasId, dataObj) {
   }
 
   const total = values.reduce((a, b) => a + b, 0);
-  const colors = generateColors(values.length);
+  //const colors = generateColors(values.length);
 
   let startAngle = 0;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+  let j = 0;
   values.forEach((value, i) => {
     const sliceAngle = (value / total) * Math.PI * 2;
 
@@ -789,11 +878,13 @@ function drawPieChart(canvasId, dataObj) {
       startAngle + sliceAngle
     );
     ctx.closePath();
-
-    ctx.fillStyle = colors[i];
+    let key = labels[j].charAt(0).toUpperCase() + labels[j].slice(1)
+    
+    ctx.fillStyle = CATEGORY_COLORS[key];
     ctx.fill();
 
     startAngle += sliceAngle;
+    j++;
   });
 }
 
@@ -809,7 +900,8 @@ function drawBarChart(canvasId, labels, values) {
   const chartHeight = canvas.height - padding * 2;
 
   const maxValue = Math.max(...values, 1);
-  const barWidth = chartWidth / values.length - 50;
+  //const barWidth = chartWidth / values.length - 50;
+  const barWidth = 20;
 
   values.forEach((value, i) => {
     const barHeight = (value / maxValue) * chartHeight;
@@ -848,3 +940,45 @@ function getWeeklyChartData() {
   };
 }
 
+// start new functions
+function createExpense({ title, amount, category, date, note = "" }) {
+  return {
+    id: generateId(),
+    title: title.trim(),
+    amount: Number(amount),
+    category: category.trim(),
+    date,
+    note: note.trim(),
+  };
+}
+
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function renderMonthlyLegend(categoryTotals) {
+  const legend = document.getElementById("monthlyLegend");
+  legend.innerHTML = "";
+
+  const total = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
+
+  Object.entries(categoryTotals).forEach(([category, amount]) => {
+
+    const color = CATEGORY_COLORS[category.charAt(0).toUpperCase() + category.slice(1)] || "#9ca3af";
+    const percent = ((amount / total) * 100).toFixed(1);
+
+    legend.innerHTML += `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full" style="background:${color}"></span>
+          <span class="capitalize">${category}</span>
+        </div>
+        <span>${amount.toFixed(2)} (${percent}%)</span>
+      </div>
+    `;
+  });
+}
+
+function getAllHistoricalExpenses() {
+  return dailyHistory.flatMap(day => day.expenses);
+}
