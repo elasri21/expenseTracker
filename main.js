@@ -264,42 +264,37 @@ function deleteExpense(id) {
 
 // Rendering the UI
 function render() {
-  list.innerHTML = "";
+list.innerHTML = "";
+let total = 0;
 
-  let total = 0;
-  
-  //const dayExpenses = expenses.filter(
-    //exp => exp.date === activeDate
-  //);
-  const dayExpenses = state.expenses.filter(
-    exp => exp.date === activeDate
+// state.expenses already = active day
+let filtered = state.expenses;
+
+if (filterCategory.value !== "All") {
+  filtered = filtered.filter(
+    exp => exp.category === filterCategory.value
   );
-  let filtered = dayExpenses;
+}
 
-  if (filterCategory.value !== "All") {
-    //filtered = expenses.filter((exp) => exp.category === filterCategory.value);
-    filtered = state.expenses.filter((exp) => exp.category === filterCategory.value);
-  }
-  
-  filtered.forEach(exp => total += exp.amount);
-  totalEl.textContent = total;
-    
-  filtered.forEach((exp) => {
-    const li = document.createElement("li");
-    li.className = "flex justify-between bg-gray-100 p-3 rounded-lg";
-    li.innerHTML = `
-      <span>
-        ${exp.title} - <strong>${exp.amount} DH</strong>
-        <span class="text-xs bg-gray-300 px-2 py-1 rounded ml-2">${exp.category}</span>
-      </span>
+filtered.forEach(exp => total += exp.amount);
+totalEl.textContent = total;
 
-      <div class="flex gap-4 ml-auto">
-        <button onclick="editExpense('${exp.id}')" class="text-blue-600 hover:underline">Edit</button>
-        <button onclick="deleteExpense('${exp.id}')" class="text-red-600 hover:underline">Delete</button>
-      </div>
-    `;
-    list.appendChild(li);
-  });
+filtered.forEach(exp => {
+  const li = document.createElement("li");
+  li.className = "flex justify-between bg-gray-100 p-3 rounded-lg";
+  li.innerHTML = `
+    <span>
+      ${exp.title} - <strong>${exp.amount} DH</strong>
+      <span class="text-xs bg-gray-300 px-2 py-1 rounded ml-2">${exp.category}</span>
+    </span>
+
+    <div class="flex gap-4 ml-auto">
+      <button onclick="editExpense('${exp.id}')" class="text-blue-600 hover:underline">Edit</button>
+      <button onclick="deleteExpense('${exp.id}')" class="text-red-600 hover:underline">Delete</button>
+    </div>
+  `;
+  list.appendChild(li);
+});
 
   // Calculate totals per category (using filtered list)
   const totals = calculateCategoryTotals(filtered);
@@ -419,7 +414,13 @@ function openDay(index) {
 
     modalList.appendChild(li);
   });
-
+  
+  let reopenAday = `
+    <button onClick="reopenDay('${day.date}')" class="bg-red-600 text-white w-full py-2 rounded-lg mb-4">
+      Reopen this day
+    </button>
+  `;
+  modalList.innerHTML += reopenAday;
   modal.classList.remove("hidden");
   modal.classList.add("flex");
 }
@@ -791,10 +792,15 @@ function renderWeeklyComparison() {
   const color = isIncrease ? "text-red-600" : "text-green-600";
   const sign = isIncrease ? "+" : "";
 
+  const { start, end } = getWeekRange(previousWeek);
+
   return `
     <div class="mb-4 p-4 rounded-lg border bg-gray-50">
       <p class="text-sm">
-        Compared to <strong>${previousWeek}</strong>:
+        Compared to week <strong>
+          ${previousWeek.split("-W")[1]} •
+          ${formatShortDate(start)} – ${formatShortDate(end)}
+        </strong>:
         <span class="${color} font-semibold">
           ${sign}${percent.toFixed(1)}%
         </span>
@@ -982,3 +988,27 @@ function renderMonthlyLegend(categoryTotals) {
 function getAllHistoricalExpenses() {
   return dailyHistory.flatMap(day => day.expenses);
 }
+
+// not called
+function reopenDay(date) {
+  if (state.expenses.length > 0) {
+    alert("Please close the current day before reopening another one.");
+    return;
+  }
+  let currentDailyHistory = JSON.parse(localStorage.getItem('dailyHistory'));
+  if (!currentDailyHistory) return;
+  const day = currentDailyHistory.find(d => d.date === date);
+  if (!day) return;
+
+  state.expenses = [...day.expenses];
+  state.activeDate = day.date;
+  currentDailyHistory = currentDailyHistory.filter(
+    d => d.date !== date
+  );
+  Storage.save(state.expenses, state.activeDate);
+  localStorage.setItem('dailyHistory', JSON.stringify(currentDailyHistory))
+  modal.classList.add("hidden");
+  render();
+}
+
+//reopenDay("2026-01-11")
