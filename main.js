@@ -33,7 +33,7 @@ const state = {
   selectedDate: DateUtils.today(),
 };
 const Storage = {
-  save(expenses, currentDay ) {
+  save(expenses, currentDay) {
     localStorage.setItem("expenses", JSON.stringify(expenses));
     localStorage.setItem("activeDate", currentDay);
   },
@@ -67,9 +67,9 @@ const totalEl = document.getElementById("total");
 const categoryInput = document.getElementById("category");
 const filterCategory = document.getElementById("filterCategory");
 const clearAllBtnContainer = document.querySelector(".clearAllBtn");
+const setBudgetBtn = document.getElementById("setBudget");
 // Load existing expenses
 const loaded = Storage.load();
-
 state.expenses = loaded.expenses || [];
 state.expenses = state.expenses.map(e => ({
   id: e.id || generateId(),
@@ -80,14 +80,12 @@ state.expenses = state.expenses.map(e => ({
   note: e.note || ""
 }));
 let dailyHistory = JSON.parse(localStorage.getItem("dailyHistory")) || [];
-
+let dailyBudget = Number(localStorage.getItem("dailyBudget")) || null;
 const today = DateUtils.dayKey(new Date());
-
 const modal = document.getElementById("dayModal");
 const modalDate = document.getElementById("modalDate");
 const modalDateTotal = document.getElementById("modalDateTotal");
 const modalList = document.getElementById("modalList");
-
 const activeDateInput = document.getElementById("activeDate");
 let activeDate =
   loaded.currentDay ||
@@ -100,14 +98,38 @@ activeDateInput.addEventListener("change", () => {
 });
 const monthSelect = document.getElementById("monthSelect");
 let selectedMonth = null;
-
 const weekSelect = document.getElementById("weekSelect");
 let selectedWeek = null;
+// store the id of the expense being edited
+let editId = null;
 
 // Render on load
 render();
 
-addBtn.addEventListener("click", () => {
+setBudgetBtn.addEventListener("click", setDailyBudget);
+addBtn.addEventListener("click", addNewExpense);
+
+monthSelect.addEventListener("change", () => {
+  selectedMonth = monthSelect.value;
+  render();
+});
+
+weekSelect.addEventListener("change", () => {
+  selectedWeek = weekSelect.value;
+  render();
+});
+
+// clear all
+const clearAllBtn = document.getElementById("clearAllBtn");
+if (clearAllBtn) {
+  clearAllBtn.addEventListener("click", closeDay)
+}
+
+filterCategory.addEventListener("change", () => {
+  render();
+});
+// add new expense
+function addNewExpense() {
   const title = titleInput.value.trim();
   const amount = Number(amountInput.value);
   const category = categoryInput.value;
@@ -123,17 +145,12 @@ addBtn.addEventListener("click", () => {
     state.expenses = state.expenses.map((exp) =>
       exp.id === editId ? { ...exp, title, amount, category } : exp
     );
-    //save();
-    //dailyHistory.push({
-      //...dailyHistory,
-      //expenses: [...state.expenses]
-    //});
+
     Storage.save(state.expenses, activeDate);
     render();
     resetForm();
     return;
   }
-
   // expenses.push(expense);
   state.expenses.push(
     createExpense({title, amount, category, date, note})
@@ -141,34 +158,15 @@ addBtn.addEventListener("click", () => {
 
   const total = state.expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
-  //dailyHistory.push({
-    //date: activeDate,
-    //total: total,
-    //expenses: [...state.expenses]
-  //});
-  //save();
   Storage.save(state.expenses, activeDate);
-  render();
 
   titleInput.value = "";
   amountInput.value = "";
-});
-
-monthSelect.addEventListener("change", () => {
-  selectedMonth = monthSelect.value;
   render();
-});
+}
 
-weekSelect.addEventListener("change", () => {
-  selectedWeek = weekSelect.value;
-  render();
-});
-
-// clear all
-const clearAllBtn = document.getElementById("clearAllBtn");
-if (clearAllBtn) {
-  clearAllBtn.addEventListener("click", () => {
-    //if (expenses.length === 0) return;
+//  close a day
+function closeDay() {
     if (state.expenses.length === 0) return;
 
     if (isDayClosed(activeDate)) {
@@ -178,16 +176,7 @@ if (clearAllBtn) {
 
     if (!confirm(`Close ${activeDate}? This action is final.`)) return;
 
-    // const today = new Date().toISOString().split("T")[0];
-
-    //const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
     const total = state.expenses.reduce((sum, exp) => sum + exp.amount, 0);
-
-    //dailyHistory.push({
-      //date: activeDate,
-      //total,
-      //expenses: [...expenses]
-    //});
 
     dailyHistory.push({
       date: activeDate,
@@ -196,22 +185,15 @@ if (clearAllBtn) {
     });
 
     localStorage.setItem("dailyHistory", JSON.stringify(dailyHistory));
-    
+    localStorage.setItem("dailyBudget", null);
     //expenses = [];
     state.expenses = [];
     
-    //activeDate = nextDay.toISOString().split("T")[0];
     activeDate = DateUtils.dayKey(new Date())
     activeDateInput.value = activeDate;
-    //localStorage.setItem("activeDate", activeDate);
     Storage.save(state.expenses, activeDate);
     render();
-  });
 }
-
-filterCategory.addEventListener("change", () => {
-  render();
-});
 
 // check for closed day
 function isDayClosed(date) {
@@ -221,13 +203,6 @@ function isDayClosed(date) {
 //
 function calculateDailyTotals() {
   const daily = {};
-
-  //expenses.forEach(exp => {
-    //if (!daily[exp.date]) {
-      //daily[exp.date] = 0;
-    //}
-    //daily[exp.date] += exp.amount;
-  //});
 
   state.expenses.forEach(exp => {
     if (!daily[exp.date]) {
@@ -253,53 +228,47 @@ function resetForm() {
 
 // Delete expense
 function deleteExpense(id) {
-  //expenses = expenses.filter((exp) => exp.id !== id);
   state.expenses = state.expenses.filter((exp) => exp.id !== id);
-  // save();
-  
-  // dailyHistory.push({...dailyHistory, expenses: [state.expenses]})
   Storage.save(state.expenses, activeDate);
   render();
 }
 
 // Rendering the UI
 function render() {
-list.innerHTML = "";
-let total = 0;
+  list.innerHTML = "";
+  let total = 0;
+  renderBudget()
+  let filtered = state.expenses;
 
-// state.expenses already = active day
-let filtered = state.expenses;
+  if (filterCategory.value !== "All") {
+    filtered = filtered.filter(
+      exp => exp.category === filterCategory.value.charAt(0).toLowerCase() + filterCategory.value.slice(1)
+    );
+  }
 
-if (filterCategory.value !== "All") {
-  filtered = filtered.filter(
-    exp => exp.category === filterCategory.value
-  );
-}
+  filtered.forEach(exp => total += exp.amount);
+  totalEl.textContent = total;
 
-filtered.forEach(exp => total += exp.amount);
-totalEl.textContent = total;
+  filtered.forEach(exp => {
+    const li = document.createElement("li");
+    li.className = "flex justify-between bg-gray-100 p-3 rounded-lg";
+    li.innerHTML = `
+      <span>
+        ${exp.title} - <strong>${exp.amount} DH</strong>
+        <span class="text-xs bg-gray-300 px-2 py-1 rounded ml-2">${exp.category}</span>
+      </span>
 
-filtered.forEach(exp => {
-  const li = document.createElement("li");
-  li.className = "flex justify-between bg-gray-100 p-3 rounded-lg";
-  li.innerHTML = `
-    <span>
-      ${exp.title} - <strong>${exp.amount} DH</strong>
-      <span class="text-xs bg-gray-300 px-2 py-1 rounded ml-2">${exp.category}</span>
-    </span>
-
-    <div class="flex gap-4 ml-auto">
-      <button onclick="editExpense('${exp.id}')" class="text-blue-600 hover:underline">Edit</button>
-      <button onclick="deleteExpense('${exp.id}')" class="text-red-600 hover:underline">Delete</button>
-    </div>
-  `;
-  list.appendChild(li);
-});
+      <div class="flex gap-4 ml-auto">
+        <button onclick="editExpense('${exp.id}')" class="text-blue-600 hover:underline">Edit</button>
+        <button onclick="deleteExpense('${exp.id}')" class="text-red-600 hover:underline">Delete</button>
+      </div>
+    `;
+    list.appendChild(li);
+  });
 
   // Calculate totals per category (using filtered list)
   const totals = calculateCategoryTotals(filtered);
 
-  //const currentMonth = activeDate.slice(0, 7); // "2026-01"
   const currentMonth = monthSelect.value.slice(0, 7)|| activeDate.slice(0, 7);
   const monthlyExpenses = getAllHistoricalExpenses().filter(
     exp => exp.date.slice(0, 7) === currentMonth
@@ -326,12 +295,6 @@ filtered.forEach(exp => {
           .join("");
   
   // Calculate daily totals
-  // const dailyTotals = calculateDailyTotals();
-
-  // Sort by most recent date
-  // const sortedDays = Object.keys(dailyTotals).sort((a, b) => new Date(b) - new Date(a));
-
-  // Render section
   const dailyContainer = document.getElementById("dailySummary");
  
   if (dailyHistory.length === 0) {
@@ -356,11 +319,7 @@ filtered.forEach(exp => {
   renderWeeklySummary();
 }
 
-// store the id of the expense being edited
-let editId = null;
-
 function editExpense(id) {
-  //const exp = expenses.find((e) => e.id === id);
   const exp = state.expenses.find((e) => e.id === id);
   if (!exp) return;
 
@@ -388,7 +347,6 @@ function calculateCategoryTotals(expenseList) {
     }
     totals[exp.category] += exp.amount;
   });
-
   return totals;
 }
 
@@ -431,7 +389,6 @@ function closeModal() {
 }
 
 function updateStartDayButton() {
-  //if (expenses.length === 0) {
   if (state.expenses.length === 0) {
     clearAllBtnContainer.innerHTML = "";
   } else {
@@ -447,7 +404,6 @@ function updateStartDayButton() {
 // monthly totals
 function getMonthlyTotals() {
   return dailyHistory.reduce((acc, day) => {
-    //const monthKey = day.date.slice(0, 7); // "YYYY-MM"
     const monthKey = DateUtils.monthKey(day.date)
     
     if (!acc[monthKey]) {
@@ -560,7 +516,6 @@ function getMonthlyComparison() {
 
 function renderMonthlyComparison() {
   const data = getMonthlyComparison();
-  // console.log(`data returned by getMonthlyComparison ${Object.keys(data)}`)
   if (!data) return "";
 
   const {
@@ -672,7 +627,6 @@ function renderCategoryComparison(month) {
 
 function getWeeklyTotals() {
   return dailyHistory.reduce((acc, day) => {
-    //const weekKey = getWeekKey(day.date);
     const weekKey = DateUtils.weekKey(day.date);
 
     if (!acc[weekKey]) {
@@ -989,7 +943,7 @@ function getAllHistoricalExpenses() {
   return dailyHistory.flatMap(day => day.expenses);
 }
 
-// not called
+// reopen a closed day
 function reopenDay(date) {
   if (state.expenses.length > 0) {
     alert("Please close the current day before reopening another one.");
@@ -1007,8 +961,47 @@ function reopenDay(date) {
   );
   Storage.save(state.expenses, state.activeDate);
   localStorage.setItem('dailyHistory', JSON.stringify(currentDailyHistory))
+  localStorage.setItem('dailyBudget', null)
   modal.classList.add("hidden");
   render();
 }
 
-//reopenDay("2026-01-11")
+// calculate remaining budget
+function getRemainingBudget() {
+  if (dailyBudget === null) return null;
+
+  const spent = state.expenses.reduce(
+    (sum, exp) => sum + exp.amount,
+    0
+  );
+
+  return dailyBudget - spent;
+}
+
+// set budget for the day
+function setDailyBudget() {
+  const budgetInput = document.getElementById("budgetInput");
+  const val = Number(budgetInput.value);
+  if (!Number.isFinite(val) || val <= 0) return;
+  dailyBudget = val;
+  localStorage.setItem("dailyBudget", val)
+  console.log('budget at click', dailyBudget)
+  render();
+}
+
+// render new budget
+function renderBudget() {
+  const budgetEl = document.getElementById("budgetInfo");
+  if (!budgetEl) return;
+
+  const remaining = getRemainingBudget();
+
+  if (remaining === null) {
+    budgetEl.textContent = "No budget set";
+    budgetEl.className = "text-gray-500";
+  } else {
+    budgetEl.textContent = `Remaining: ${remaining} DH`;
+    budgetEl.className =
+      remaining < 0 ? "text-red-600" : "text-green-600";
+  }
+}
