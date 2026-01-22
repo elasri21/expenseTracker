@@ -918,7 +918,7 @@ function generateId() {
 
 function renderMonthlyLegend(categoryTotals) {
   const legend = document.getElementById("monthlyLegend");
-  legend.innerHTML = "";
+  legend.innerHTML = `<h2 class="text-lg font-semibold mb-4">Monthly legend</h2>`;
 
   const total = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
 
@@ -928,7 +928,7 @@ function renderMonthlyLegend(categoryTotals) {
     const percent = ((amount / total) * 100).toFixed(1);
 
     legend.innerHTML += `
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between bg-gray-100 p-4 rounded-lg text-sm">
         <div class="flex items-center gap-2">
           <span class="w-3 h-3 rounded-full" style="background:${color}"></span>
           <span class="capitalize">${category}</span>

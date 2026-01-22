@@ -11,7 +11,6 @@
     <div class="bg-white shadow-lg rounded-xl p-6 w-full max-w-md lg:max-w-5xl">
       <h1 class="text-2xl font-bold text-center mb-4">Expense Tracker</h1>
 
-      
       <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <!-- set budget -->
         <div class="flex flex-col gap-4 mb-4">
@@ -172,7 +171,7 @@
         </section>
 
         <!-- monthly legend -->
-        <div id="monthlyLegend" class="bg-gray-100 p-4 rounded-lg text-sm flex flex-col gap-4"></div>
+        <div id="monthlyLegend" class="flex flex-col gap-4"></div>
         
         <!-- weekly Select -->
         <div class="mb-4 flex flex-col gap-4">
@@ -190,7 +189,7 @@
           <div class="text-lg font-semibold">
             Daily totals
           </div>
-          <div>
+          <div class="bg-gray-100 p-1 rounded-lg">
             <canvas
               id="weeklyTotalChart"
               width="500"
