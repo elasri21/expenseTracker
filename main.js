@@ -103,6 +103,9 @@ let selectedWeek = null;
 // store the id of the expense being edited
 let editId = null;
 
+// track over spent
+let carryOver = Number(localStorage.getItem("carryOver")) || 0;
+
 // Render on load
 render();
 
@@ -124,10 +127,13 @@ const clearAllBtn = document.getElementById("clearAllBtn");
 if (clearAllBtn) {
   clearAllBtn.addEventListener("click", closeDay)
 }
+const resetCarryOverBtn = document.getElementById("resetCarryOver");
+resetCarryOverBtn.addEventListener("click", resetCarryOver)
 
 filterCategory.addEventListener("change", () => {
   render();
 });
+
 // add new expense
 function addNewExpense() {
   const title = titleInput.value.trim();
@@ -177,6 +183,10 @@ function closeDay() {
     if (!confirm(`Close ${activeDate}? This action is final.`)) return;
 
     const total = state.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+    if (dailyBudget !== null && total > dailyBudget) {
+      carryOver += (total - dailyBudget);
+      localStorage.setItem("carryOver", carryOver);
+    }
 
     dailyHistory.push({
       date: activeDate,
@@ -192,6 +202,7 @@ function closeDay() {
     activeDate = DateUtils.dayKey(new Date())
     activeDateInput.value = activeDate;
     Storage.save(state.expenses, activeDate);
+
     render();
 }
 
@@ -233,6 +244,27 @@ function deleteExpense(id) {
   render();
 }
 
+// reset carry over
+function resetCarryOver() {
+  if (!confirm("Reset overspending tracker?")) return;
+
+  carryOver = 0;
+  localStorage.setItem("carryOver", carryOver);
+  render();
+}
+
+// render carry over
+function renderCarryOver() {
+  const overSpent = document.getElementById("overSpent");
+  if (!overSpent) return;
+
+  overSpent.textContent = `${carryOver > 0 ? "-" : "+" }${carryOver} DH`;
+  overSpent.className =
+    carryOver > 0
+      ? "font-semibold text-red-600"
+      : "font-semibold text-green-600";
+}
+
 // Rendering the UI
 function render() {
   list.innerHTML = "";
@@ -249,6 +281,7 @@ function render() {
   filtered.forEach(exp => total += exp.amount);
   totalEl.textContent = total;
 
+  renderCarryOver();
   filtered.forEach(exp => {
     const li = document.createElement("li");
     li.className = "flex justify-between bg-gray-100 p-3 rounded-lg";
@@ -918,7 +951,7 @@ function generateId() {
 
 function renderMonthlyLegend(categoryTotals) {
   const legend = document.getElementById("monthlyLegend");
-  legend.innerHTML = `<h2 class="text-lg font-semibold mb-4">Monthly legend</h2>`;
+  legend.innerHTML = `<h2 class="text-lg font-semibold mb-4 pb-2 border-b border-gray-300 shadow-sm">Monthly legend</h2>`;
 
   const total = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
 
